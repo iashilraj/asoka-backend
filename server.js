@@ -23,8 +23,34 @@ mongoose
 /* ---------- Schema ---------- */
 const patientSchema = new mongoose.Schema({
   name: String,
-  phone: String,
-  healthHistory: String,
+  age: String,
+  sex: String,
+  dob: String,
+  address: String,
+  mobile: String,
+  email: String,
+  refId: String,
+  guardianName: String,
+  idProof: String,
+  occupation: String,
+
+  diagnosis: String,
+  provisionalDiagnosis: String,
+  clinicalHistory: String,
+  familyHistory: String,
+
+  firstVisit: {
+    date: String,
+    height: String,
+    weight: String,
+    pulse: String,
+    bp: String,
+    temp: String,
+    spo2: String,
+    symptoms: String,
+    prescription: String,
+    fee: String,
+  },
 });
 
 const Patient = mongoose.model("Patient", patientSchema);
