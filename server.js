@@ -563,15 +563,24 @@ app.delete("/patients/:id/visits/:visitId", auth, async (req, res) => {
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 
-app.post("/register", async (req, res) => {
+app.post("/register", auth, requireAdmin, async (req, res) => {
   const { username, password } = req.body;
+
+  if (!username || !password) {
+    return res.status(400).json({ message: "Username and password are required" });
+  }
+
+  const existingUser = await User.findOne({ username });
+  if (existingUser) {
+    return res.status(409).json({ message: "Username already exists" });
+  }
 
   const hashed = await bcrypt.hash(password, 10);
 
-  const user = new User({ username, password: hashed });
+  const user = new User({ username, password: hashed, role: "doctor" });
   await user.save();
 
-  res.json({ message: "User created" });
+  res.json({ message: "Doctor account created", userId: user._id, role: user.role });
 });
 
 app.post("/login", async (req, res) => {
@@ -583,19 +592,43 @@ app.post("/login", async (req, res) => {
   const isMatch = await bcrypt.compare(password, user.password);
   if (!isMatch) return res.status(400).json({ message: "Wrong password" });
 
-  const token = jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: "1d" });
+  const resolvedRole = user.role || (user.username === "admin" ? "admin" : "doctor");
 
-  res.json({ token });
+  if (!user.role) {
+    user.role = resolvedRole;
+    await user.save();
+  }
+
+  const token = jwt.sign(
+    { id: user._id, role: resolvedRole, username: user.username },
+    JWT_SECRET,
+    { expiresIn: "1d" }
+  );
+
+  res.json({ token, role: resolvedRole });
 });
 
 function auth(req, res, next) {
-  const token = req.headers.authorization;
+  const authHeader = req.headers.authorization;
+  const token = authHeader?.startsWith("Bearer ")
+    ? authHeader.slice(7)
+    : authHeader;
+
   if (!token) return res.status(401).json({ message: "No token" });
 
   try {
-    jwt.verify(token, JWT_SECRET);
+    const decoded = jwt.verify(token, JWT_SECRET);
+    req.user = decoded;
     next();
   } catch {
     res.status(401).json({ message: "Invalid token" });
   }
+}
+
+function requireAdmin(req, res, next) {
+  if (req.user?.role !== "admin") {
+    return res.status(403).json({ message: "Admin access required" });
+  }
+
+  next();
 }
