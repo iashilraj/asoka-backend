@@ -625,10 +625,35 @@ function auth(req, res, next) {
   }
 }
 
-function requireAdmin(req, res, next) {
-  if (req.user?.role !== "admin") {
+async function requireAdmin(req, res, next) {
+  const tokenRole = String(req.user?.role || "").toLowerCase();
+  if (tokenRole === "admin") {
+    return next();
+  }
+
+  // Backward compatibility: if token is old/missing role, resolve from DB.
+  if (!req.user?.id) {
     return res.status(403).json({ message: "Admin access required" });
   }
 
-  next();
+  const dbUser = await User.findById(req.user.id);
+  if (!dbUser) {
+    return res.status(403).json({ message: "Admin access required" });
+  }
+
+  const dbRole = String(dbUser.role || "").toLowerCase();
+
+  // Legacy fallback for old admin account created before role support.
+  const isLegacyAdmin =
+    !dbUser.role && String(dbUser.username || "").toLowerCase() === "admin";
+
+  if (dbRole === "admin" || isLegacyAdmin) {
+    if (isLegacyAdmin) {
+      dbUser.role = "admin";
+      await dbUser.save();
+    }
+    return next();
+  }
+
+  return res.status(403).json({ message: "Admin access required" });
 }
